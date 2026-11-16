@@ -8,5 +8,9 @@ services:
     ports: ["5443:5432"]
     volumes: [ledger-data:/var/lib/postgresql]
 
+  ledger-redis:
+    image: redis:8
+    ports: ["6380:6379"]
+
 volumes:
   ledger-data:

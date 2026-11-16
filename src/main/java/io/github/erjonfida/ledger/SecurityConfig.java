@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -28,7 +29,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 class SecurityConfig {
 
 	@Bean
-	SecurityFilterChain api(HttpSecurity http, ClientRepository clients) throws Exception {
+	SecurityFilterChain api(HttpSecurity http, ClientRepository clients, StringRedisTemplate redis) throws Exception {
 		Filter apiKeys = (request, response, chain) -> {
 			String apiKey = ((HttpServletRequest) request).getHeader("X-API-Key");
 			if (apiKey != null) {
@@ -43,6 +44,7 @@ class SecurityConfig {
 		};
 		return http
 			.addFilterBefore(apiKeys, AnonymousAuthenticationFilter.class)
+			.addFilterAfter(new RateLimitFilter(redis), AnonymousAuthenticationFilter.class)
 			.authorizeHttpRequests(requests -> requests
 				.requestMatchers(HttpMethod.POST, "/api/clients").permitAll()
 				.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()

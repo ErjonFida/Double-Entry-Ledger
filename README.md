@@ -2,14 +2,14 @@
 
 Double-entry ledger API: accounts, deposits and transfers, where every movement of money is two entries that sum to zero.
 
-**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, springdoc-openapi, JUnit, Mockito, Testcontainers.
+**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers.
 
 ## Run locally
 
 Needs JDK 25 and Docker.
 
 ```bash
-docker compose up -d       # PostgreSQL on :5443
+docker compose up -d       # PostgreSQL on :5443, Redis on :6380
 ./mvnw spring-boot:run     # http://localhost:8094/swagger-ui.html
 ```
 
@@ -36,6 +36,8 @@ Register a client to get an API key, then send it as an `X-API-Key` header on ev
 
 Amounts are whole minor units (cents). Errors come back as problem details (RFC 9457).
 
+Each client may send 60 requests a minute, and each IP address may register 5 clients an hour. Past that, requests get a 429 with a `Retry-After` header saying how many seconds to wait.
+
 The two requests that move money need an `Idempotency-Key` header, any string up to 100 characters. Generate one per transfer, and send the same one when you retry it:
 
 - A retry with the same key and body returns the first response, and moves no more money.
@@ -53,6 +55,8 @@ The two requests that move money need an `Idempotency-Key` header, any string up
 - A database `CHECK` stops every other balance from going below zero.
 - A transfer starts by inserting its row with `ON CONFLICT (client_id, idempotency_key) DO NOTHING`. If two retries arrive at once, PostgreSQL makes the second wait until the first commits, and it then returns the first one's transfer. A test sends 20 copies at once and checks the money moved once.
 - A transfer updates the account with the lower id first, whichever way the money goes. Two opposite transfers then lock the accounts in the same order, so they cannot deadlock.
+- Rate limits are counted in Redis by a small Lua script, which increments the counter and sets its expiry in one atomic step. The window starts at a client's first request, so up to twice the limit can fit across the end of one window and the start of the next.
+- If Redis is down, requests go through and a warning is logged, so an outage cannot take the ledger down. Redis calls time out after 500 ms, which is the extra latency while it lasts.
 - A seeded test runs 10,000 random transfers, then checks that all entries sum to zero and every balance equals the sum of its entries.
 
 ## Deadlock experiment
@@ -81,6 +85,6 @@ Measured with Docker Desktop on Windows 11.
 
 - [x] 1. Core ledger: accounts, deposits, transfers, entry history, the balance invariant test
 - [x] 2. Retries and deadlocks: idempotency keys, the opposing-transfers experiment
-- [ ] 3. Client access: API keys with Spring Security (done), idempotency keys scoped to each client (done), rate limiting in Redis
-- [ ] 4. Deploy: Dockerfile, CI, AWS
+- [x] 3. Client access: API keys with Spring Security, idempotency keys scoped to each client, rate limiting in Redis
+- [ ] 4. Deploy: Dockerfile, CI, AWS. Behind a load balancer, take client addresses from `X-Forwarded-For` so the registration limit still counts each address
 - [ ] 5. Batch reconciliation of bank statements with Spring Batch

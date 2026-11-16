@@ -21,16 +21,19 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -93,8 +96,7 @@ class LedgerIntegrationTests {
 		anonymous.perform(openRequest("Alice", "EUR").header("X-API-Key", "not-a-key"))
 			.andExpect(status().isUnauthorized());
 
-		String registered = anonymous
-			.perform(post("/api/clients").contentType(APPLICATION_JSON).content("{\"name\": \"Shop\"}"))
+		String registered = anonymous.perform(register("Shop"))
 			.andExpect(status().isCreated())
 			.andReturn().getResponse().getContentAsString();
 		String apiKey = JsonPath.read(registered, "$.apiKey");
@@ -102,6 +104,30 @@ class LedgerIntegrationTests {
 		anonymous.perform(openRequest("Alice", "EUR").header("X-API-Key", apiKey)).andExpect(status().isCreated());
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM client WHERE api_key_hash = ?", Long.class,
 				Client.hash(apiKey))).isOne();
+	}
+
+	@Test
+	void eachClientIsLimitedTo60RequestsAMinute() throws Exception {
+		String alice = open("Alice", "EUR");
+		for (int i = 1; i < RateLimitFilter.REQUESTS_PER_MINUTE; i++) {
+			mvc.perform(get("/api/accounts/{id}", alice)).andExpect(status().isOk());
+		}
+
+		mvc.perform(get("/api/accounts/{id}", alice))
+			.andExpect(status().isTooManyRequests())
+			.andExpect(header().string("Retry-After", matchesPattern("[1-9][0-9]?")))
+			.andExpect(jsonPath("$.status").value(429));
+		openAs(otherClient(), "Eve", "EUR");
+	}
+
+	@Test
+	void registrationIsLimitedPerAddress() throws Exception {
+		for (int i = 0; i < RateLimitFilter.REGISTRATIONS_PER_HOUR; i++) {
+			anonymous.perform(register("Shop").with(from("203.0.113.7"))).andExpect(status().isCreated());
+		}
+
+		anonymous.perform(register("Shop").with(from("203.0.113.7"))).andExpect(status().isTooManyRequests());
+		anonymous.perform(register("Shop").with(from("203.0.113.8"))).andExpect(status().isCreated());
 	}
 
 	@Test
@@ -303,6 +329,17 @@ class LedgerIntegrationTests {
 			.andExpect(status().isCreated())
 			.andReturn().getResponse().getContentAsString();
 		return JsonPath.read(created, "$.id");
+	}
+
+	private static MockHttpServletRequestBuilder register(String name) {
+		return post("/api/clients").contentType(APPLICATION_JSON).content("{\"name\": \"%s\"}".formatted(name));
+	}
+
+	private static RequestPostProcessor from(String address) {
+		return request -> {
+			request.setRemoteAddr(address);
+			return request;
+		};
 	}
 
 	private static MockHttpServletRequestBuilder openRequest(String name, String currency) {
