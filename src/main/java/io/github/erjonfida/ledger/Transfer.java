@@ -16,6 +16,8 @@ public class Transfer {
 	@Id
 	private UUID id;
 
+	private UUID clientId;
+
 	private UUID fromAccountId;
 
 	private UUID toAccountId;
@@ -29,8 +31,9 @@ public class Transfer {
 	protected Transfer() {
 	}
 
-	Transfer(UUID fromAccountId, UUID toAccountId, long amount, String idempotencyKey) {
+	Transfer(UUID clientId, UUID fromAccountId, UUID toAccountId, long amount, String idempotencyKey) {
 		this.id = UUID.randomUUID();
+		this.clientId = clientId;
 		this.fromAccountId = fromAccountId;
 		this.toAccountId = toAccountId;
 		this.amount = amount;
@@ -45,6 +48,10 @@ public class Transfer {
 
 	public UUID getId() {
 		return id;
+	}
+
+	public UUID getClientId() {
+		return clientId;
 	}
 
 	public UUID getFromAccountId() {

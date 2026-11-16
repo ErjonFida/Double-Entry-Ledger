@@ -56,9 +56,11 @@ class LedgerIntegrationTests {
 
 	UUID client;
 
+	String apiKey;
+
 	@BeforeEach
 	void registerClient() {
-		String apiKey = Client.newApiKey();
+		apiKey = Client.newApiKey();
 		client = clients.save(new Client("Test", apiKey)).getId();
 		anonymous = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
 		mvc = MockMvcBuilders.webAppContextSetup(context)
@@ -106,10 +108,8 @@ class LedgerIntegrationTests {
 	void clientsCannotReachEachOthersAccounts() throws Exception {
 		String alice = open("Alice", "EUR");
 		mvc.perform(deposit(alice, 1_000)).andExpect(status().isCreated());
-		String otherKey = Client.newApiKey();
-		clients.save(new Client("Other", otherKey));
-		String eve = JsonPath.read(mvc.perform(openRequest("Eve", "EUR").header("X-API-Key", otherKey))
-			.andReturn().getResponse().getContentAsString(), "$.id");
+		String otherKey = otherClient();
+		String eve = openAs(otherKey, "Eve", "EUR");
 
 		mvc.perform(get("/api/accounts/{id}", alice).header("X-API-Key", otherKey)).andExpect(status().isNotFound());
 		mvc.perform(get("/api/accounts/{id}/entries", alice).header("X-API-Key", otherKey))
@@ -121,6 +121,22 @@ class LedgerIntegrationTests {
 		mvc.perform(transfer(cash, alice, 1)).andExpect(status().isNotFound());
 
 		mvc.perform(get("/api/accounts/{id}", alice)).andExpect(jsonPath("$.balance").value(1_000));
+	}
+
+	@Test
+	void eachClientHasItsOwnIdempotencyKeys() throws Exception {
+		String otherKey = otherClient();
+		String alice = open("Alice", "EUR");
+		String eve = openAs(otherKey, "Eve", "EUR");
+		String key = UUID.randomUUID().toString();
+
+		mvc.perform(deposit(alice, 100, key)).andExpect(status().isCreated());
+		mvc.perform(deposit(eve, 200, key).header("X-API-Key", otherKey))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.toAccountId").value(eve));
+
+		mvc.perform(get("/api/accounts/{id}", eve).header("X-API-Key", otherKey))
+			.andExpect(jsonPath("$.balance").value(200));
 	}
 
 	@Test
@@ -272,8 +288,18 @@ class LedgerIntegrationTests {
 		return jdbc.queryForObject(sql, Long.class);
 	}
 
+	private String otherClient() {
+		String otherKey = Client.newApiKey();
+		clients.save(new Client("Other", otherKey));
+		return otherKey;
+	}
+
 	private String open(String name, String currency) throws Exception {
-		String created = mvc.perform(openRequest(name, currency))
+		return openAs(apiKey, name, currency);
+	}
+
+	private String openAs(String key, String name, String currency) throws Exception {
+		String created = mvc.perform(openRequest(name, currency).header("X-API-Key", key))
 			.andExpect(status().isCreated())
 			.andReturn().getResponse().getContentAsString();
 		return JsonPath.read(created, "$.id");
@@ -285,8 +311,12 @@ class LedgerIntegrationTests {
 	}
 
 	private static MockHttpServletRequestBuilder deposit(String account, long amount) {
+		return deposit(account, amount, UUID.randomUUID().toString());
+	}
+
+	private static MockHttpServletRequestBuilder deposit(String account, long amount, String key) {
 		return post("/api/accounts/{id}/deposits", account).contentType(APPLICATION_JSON)
-			.header("Idempotency-Key", UUID.randomUUID().toString())
+			.header("Idempotency-Key", key)
 			.content("{\"amount\": %d}".formatted(amount));
 	}
 

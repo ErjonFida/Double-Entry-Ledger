@@ -9,14 +9,14 @@ import org.springframework.data.jpa.repository.Query;
 
 interface TransferRepository extends JpaRepository<Transfer, UUID> {
 
-	Optional<Transfer> findByIdempotencyKey(String idempotencyKey);
+	Optional<Transfer> findByClientIdAndIdempotencyKey(UUID clientId, String idempotencyKey);
 
 	@Modifying
 	@Query(value = """
-			INSERT INTO transfer (id, from_account_id, to_account_id, amount, created_at, idempotency_key)
-			VALUES (:#{#t.id}, :#{#t.fromAccountId}, :#{#t.toAccountId}, :#{#t.amount}, :#{#t.createdAt},
-			        :#{#t.idempotencyKey})
-			ON CONFLICT (idempotency_key) DO NOTHING
+			INSERT INTO transfer (id, client_id, from_account_id, to_account_id, amount, created_at, idempotency_key)
+			VALUES (:#{#t.id}, :#{#t.clientId}, :#{#t.fromAccountId}, :#{#t.toAccountId}, :#{#t.amount},
+			        :#{#t.createdAt}, :#{#t.idempotencyKey})
+			ON CONFLICT (client_id, idempotency_key) DO NOTHING
 			""", nativeQuery = true)
 	int insertIfKeyIsNew(Transfer t);
 

@@ -45,7 +45,7 @@ public class LedgerService {
 	@Transactional
 	public Transfer deposit(UUID client, UUID accountId, long amount, String idempotencyKey) {
 		Account cash = cashAccount(account(client, accountId).getCurrency());
-		return move(cash.getId(), accountId, amount, idempotencyKey);
+		return move(client, cash.getId(), accountId, amount, idempotencyKey);
 	}
 
 	@Transactional
@@ -56,11 +56,11 @@ public class LedgerService {
 		if (!account(client, from).getCurrency().equals(account(client, to).getCurrency())) {
 			throw new IllegalArgumentException("The accounts are in different currencies");
 		}
-		return move(from, to, amount, idempotencyKey);
+		return move(client, from, to, amount, idempotencyKey);
 	}
 
-	private Transfer move(UUID from, UUID to, long amount, String idempotencyKey) {
-		Transfer transfer = new Transfer(from, to, amount, idempotencyKey);
+	private Transfer move(UUID client, UUID from, UUID to, long amount, String idempotencyKey) {
+		Transfer transfer = new Transfer(client, from, to, amount, idempotencyKey);
 		if (transfers.insertIfKeyIsNew(transfer) == 0) {
 			return replay(transfer);
 		}
@@ -85,7 +85,8 @@ public class LedgerService {
 	}
 
 	private Transfer replay(Transfer request) {
-		Transfer first = transfers.findByIdempotencyKey(request.getIdempotencyKey()).orElseThrow();
+		Transfer first = transfers.findByClientIdAndIdempotencyKey(request.getClientId(), request.getIdempotencyKey())
+			.orElseThrow();
 		if (!first.isSameRequestAs(request)) {
 			throw new IdempotencyKeyReusedException(request.getIdempotencyKey());
 		}

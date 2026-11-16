@@ -41,6 +41,7 @@ The two requests that move money need an `Idempotency-Key` header, any string up
 - A retry with the same key and body returns the first response, and moves no more money.
 - The same key with a different body returns 422.
 - A request that failed (say, for lack of funds) is not stored, so it can be retried with the same key.
+- Keys belong to the client, so two clients can use the same key without clashing.
 
 ## How it works
 
@@ -50,7 +51,7 @@ The two requests that move money need an `Idempotency-Key` header, any string up
 - Each client sees only its own accounts, and both accounts in a transfer must be the caller's. Another client's account answers 404, the same as one that does not exist.
 - API keys are 256 random bits, stored only as SHA-256 hashes. A fast hash is enough for random keys; slow hashes like bcrypt are for passwords people can guess.
 - A database `CHECK` stops every other balance from going below zero.
-- A transfer starts by inserting its row with `ON CONFLICT (idempotency_key) DO NOTHING`. If two retries arrive at once, PostgreSQL makes the second wait until the first commits, and it then returns the first one's transfer. A test sends 20 copies at once and checks the money moved once.
+- A transfer starts by inserting its row with `ON CONFLICT (client_id, idempotency_key) DO NOTHING`. If two retries arrive at once, PostgreSQL makes the second wait until the first commits, and it then returns the first one's transfer. A test sends 20 copies at once and checks the money moved once.
 - A transfer updates the account with the lower id first, whichever way the money goes. Two opposite transfers then lock the accounts in the same order, so they cannot deadlock.
 - A seeded test runs 10,000 random transfers, then checks that all entries sum to zero and every balance equals the sum of its entries.
 
@@ -80,6 +81,6 @@ Measured with Docker Desktop on Windows 11.
 
 - [x] 1. Core ledger: accounts, deposits, transfers, entry history, the balance invariant test
 - [x] 2. Retries and deadlocks: idempotency keys, the opposing-transfers experiment
-- [ ] 3. Client access: API keys with Spring Security (done), idempotency keys scoped to each client, rate limiting in Redis
+- [ ] 3. Client access: API keys with Spring Security (done), idempotency keys scoped to each client (done), rate limiting in Redis
 - [ ] 4. Deploy: Dockerfile, CI, AWS
 - [ ] 5. Batch reconciliation of bank statements with Spring Batch

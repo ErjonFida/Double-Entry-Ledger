@@ -92,9 +92,9 @@ class LedgerServiceTests {
 	@Test
 	void aRepeatedKeyReturnsTheFirstTransferAndMovesNoMoney() {
 		bothInEuros();
-		Transfer first = new Transfer(alice, bob, 500, "key-1");
+		Transfer first = new Transfer(client, alice, bob, 500, "key-1");
 		when(transfers.insertIfKeyIsNew(any())).thenReturn(0);
-		when(transfers.findByIdempotencyKey("key-1")).thenReturn(Optional.of(first));
+		when(transfers.findByClientIdAndIdempotencyKey(client, "key-1")).thenReturn(Optional.of(first));
 
 		assertThat(ledger.transfer(client, alice, bob, 500, "key-1")).isSameAs(first);
 
@@ -106,7 +106,7 @@ class LedgerServiceTests {
 	void aKeyReusedForADifferentTransferIsRejected() {
 		bothInEuros();
 		when(transfers.insertIfKeyIsNew(any())).thenReturn(0);
-		when(transfers.findByIdempotencyKey("key-1")).thenReturn(Optional.of(new Transfer(alice, bob, 500, "key-1")));
+		when(transfers.findByClientIdAndIdempotencyKey(client, "key-1")).thenReturn(Optional.of(new Transfer(client, alice, bob, 500, "key-1")));
 
 		assertThatThrownBy(() -> ledger.transfer(client, alice, bob, 900, "key-1"))
 			.isInstanceOf(IdempotencyKeyReusedException.class);
