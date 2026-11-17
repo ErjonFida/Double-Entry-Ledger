@@ -7,10 +7,28 @@ services:
       POSTGRES_PASSWORD: ledger
     ports: ["5443:5432"]
     volumes: [ledger-data:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "127.0.0.1", "-U", "ledger"]
+      interval: 2s
+      retries: 30
 
   ledger-redis:
     image: redis:8
     ports: ["6380:6379"]
+
+  ledger:
+    profiles: [app]
+    build: .
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://ledger-db:5432/ledger
+      SPRING_DATA_REDIS_HOST: ledger-redis
+      SPRING_DATA_REDIS_PORT: 6379
+    ports: ["8094:8094"]
+    depends_on:
+      ledger-db:
+        condition: service_healthy
+      ledger-redis:
+        condition: service_started
 
 volumes:
   ledger-data:

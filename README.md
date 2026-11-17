@@ -2,7 +2,7 @@
 
 Double-entry ledger API: accounts, deposits and transfers, where every movement of money is two entries that sum to zero.
 
-**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers.
+**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers, Docker.
 
 ## Run locally
 
@@ -14,6 +14,12 @@ docker compose up -d       # PostgreSQL on :5443, Redis on :6380
 ```
 
 On Windows PowerShell use `.\mvnw.cmd` instead of `./mvnw`.
+
+Or run everything in Docker, with no JDK needed:
+
+```bash
+docker compose --profile app up -d --build   # http://localhost:8094/swagger-ui.html
+```
 
 ## Test
 
@@ -57,6 +63,7 @@ The two requests that move money need an `Idempotency-Key` header, any string up
 - A transfer updates the account with the lower id first, whichever way the money goes. Two opposite transfers then lock the accounts in the same order, so they cannot deadlock.
 - Rate limits are counted in Redis by a small Lua script, which increments the counter and sets its expiry in one atomic step. The window starts at a client's first request, so up to twice the limit can fit across the end of one window and the start of the next.
 - If Redis is down, requests go through and a warning is logged, so an outage cannot take the ledger down. Redis calls time out after 500 ms, which is the extra latency while it lasts.
+- Behind a proxy or load balancer, the client address comes from `X-Forwarded-For`. It is trusted only when the connection itself comes from a private address, so a client connecting directly cannot fake one to get round the registration limit.
 - A seeded test runs 10,000 random transfers, then checks that all entries sum to zero and every balance equals the sum of its entries.
 
 ## Deadlock experiment
@@ -86,5 +93,5 @@ Measured with Docker Desktop on Windows 11.
 - [x] 1. Core ledger: accounts, deposits, transfers, entry history, the balance invariant test
 - [x] 2. Retries and deadlocks: idempotency keys, the opposing-transfers experiment
 - [x] 3. Client access: API keys with Spring Security, idempotency keys scoped to each client, rate limiting in Redis
-- [ ] 4. Deploy: Dockerfile, CI, AWS. Behind a load balancer, take client addresses from `X-Forwarded-For` so the registration limit still counts each address
+- [ ] 4. Deploy: Docker image (done), CI, AWS
 - [ ] 5. Batch reconciliation of bank statements with Spring Batch
