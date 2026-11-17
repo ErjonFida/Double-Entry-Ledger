@@ -1,8 +1,10 @@
 # Ledger
 
+[![CI](https://github.com/ErjonFida/ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/ErjonFida/ledger/actions/workflows/ci.yml)
+
 Double-entry ledger API: accounts, deposits and transfers, where every movement of money is two entries that sum to zero.
 
-**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers, Docker.
+**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers, Docker, GitHub Actions.
 
 ## Run locally
 
@@ -26,6 +28,8 @@ docker compose --profile app up -d --build   # http://localhost:8094/swagger-ui.
 ```bash
 ./mvnw verify              # Testcontainers starts a real PostgreSQL in Docker
 ```
+
+GitHub Actions runs the same on every push and pull request. Each push to `main` that passes also publishes the image as `ghcr.io/erjonfida/ledger`, tagged `latest` and with the commit's SHA.
 
 ## API
 
@@ -93,5 +97,5 @@ Measured with Docker Desktop on Windows 11.
 - [x] 1. Core ledger: accounts, deposits, transfers, entry history, the balance invariant test
 - [x] 2. Retries and deadlocks: idempotency keys, the opposing-transfers experiment
 - [x] 3. Client access: API keys with Spring Security, idempotency keys scoped to each client, rate limiting in Redis
-- [ ] 4. Deploy: Docker image (done), CI, AWS
+- [ ] 4. Deploy: Docker image (done), CI (done), AWS
 - [ ] 5. Batch reconciliation of bank statements with Spring Batch
