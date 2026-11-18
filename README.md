@@ -1,6 +1,6 @@
-# Ledger
+# Double-Entry Ledger
 
-[![CI](https://github.com/ErjonFida/ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/ErjonFida/ledger/actions/workflows/ci.yml)
+[![CI](https://github.com/ErjonFida/Double-Entry-Ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/ErjonFida/Double-Entry-Ledger/actions/workflows/ci.yml)
 
 Double-entry ledger API: accounts, deposits and transfers, where every movement of money is two entries that sum to zero.
 
@@ -29,7 +29,7 @@ docker compose --profile app up -d --build   # http://localhost:8094/swagger-ui.
 ./mvnw verify              # Testcontainers starts a real PostgreSQL in Docker
 ```
 
-GitHub Actions runs the same on every push and pull request. Each push to `main` that passes also publishes the image as `ghcr.io/erjonfida/ledger`, tagged `latest` and with the commit's SHA.
+GitHub Actions runs the same on every push and pull request. Each push to `main` that passes also publishes the image as `ghcr.io/erjonfida/double-entry-ledger`, tagged `latest` and with the commit's SHA.
 
 ## Deploy
 

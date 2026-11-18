@@ -56,8 +56,8 @@ On the instance:
 
 ```bash
 cloud-init status --wait
-git clone https://github.com/ErjonFida/ledger.git
-cd ledger/deploy
+git clone https://github.com/ErjonFida/Double-Entry-Ledger.git
+cd Double-Entry-Ledger/deploy
 cp .env.example .env
 nano .env
 docker compose up -d
@@ -79,7 +79,7 @@ icacls ledger.pem /inheritance:r /grant:r "$($env:USERNAME):R"
 ## Update
 
 ```bash
-cd ~/ledger/deploy && git pull && docker compose pull && docker compose up -d
+cd ~/Double-Entry-Ledger/deploy && git pull && docker compose pull && docker compose up -d
 ```
 
 To roll back, add `TAG=` with a commit's full SHA to `.env` and run `docker compose up -d`. CI tags every image it publishes with its commit's SHA.

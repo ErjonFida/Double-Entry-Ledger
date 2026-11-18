@@ -40,5 +40,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/erjonfida/ledger:latest
-            ghcr.io/erjonfida/ledger:${{ github.sha }}
+            ghcr.io/erjonfida/double-entry-ledger:latest
+            ghcr.io/erjonfida/double-entry-ledger:${{ github.sha }}

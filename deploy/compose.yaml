@@ -1,6 +1,6 @@
 services:
   ledger:
-    image: ghcr.io/erjonfida/ledger:${TAG:-latest}
+    image: ghcr.io/erjonfida/double-entry-ledger:${TAG:-latest}
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST:?}:5432/ledger?sslmode=require
