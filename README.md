@@ -4,7 +4,7 @@
 
 Double-entry ledger API: accounts, deposits and transfers, where every movement of money is two entries that sum to zero.
 
-**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers, Docker, GitHub Actions.
+**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers, Docker, GitHub Actions, AWS (EC2, RDS), Caddy.
 
 ## Run locally
 
@@ -30,6 +30,10 @@ docker compose --profile app up -d --build   # http://localhost:8094/swagger-ui.
 ```
 
 GitHub Actions runs the same on every push and pull request. Each push to `main` that passes also publishes the image as `ghcr.io/erjonfida/ledger`, tagged `latest` and with the commit's SHA.
+
+## Deploy
+
+On AWS, one EC2 instance runs that image, Redis, and Caddy for HTTPS, and PostgreSQL runs on RDS, which only the instance can reach. [deploy/README.md](deploy/README.md) walks through it.
 
 ## API
 
@@ -67,7 +71,7 @@ The two requests that move money need an `Idempotency-Key` header, any string up
 - A transfer updates the account with the lower id first, whichever way the money goes. Two opposite transfers then lock the accounts in the same order, so they cannot deadlock.
 - Rate limits are counted in Redis by a small Lua script, which increments the counter and sets its expiry in one atomic step. The window starts at a client's first request, so up to twice the limit can fit across the end of one window and the start of the next.
 - If Redis is down, requests go through and a warning is logged, so an outage cannot take the ledger down. Redis calls time out after 500 ms, which is the extra latency while it lasts.
-- Behind a proxy or load balancer, the client address comes from `X-Forwarded-For`. It is trusted only when the connection itself comes from a private address, so a client connecting directly cannot fake one to get round the registration limit.
+- Behind a proxy, such as Caddy in the AWS deploy, the client address comes from `X-Forwarded-For`. It is trusted only when the connection itself comes from a private address, so a client connecting directly cannot fake one to get round the registration limit.
 - A seeded test runs 10,000 random transfers, then checks that all entries sum to zero and every balance equals the sum of its entries.
 
 ## Deadlock experiment
@@ -97,5 +101,5 @@ Measured with Docker Desktop on Windows 11.
 - [x] 1. Core ledger: accounts, deposits, transfers, entry history, the balance invariant test
 - [x] 2. Retries and deadlocks: idempotency keys, the opposing-transfers experiment
 - [x] 3. Client access: API keys with Spring Security, idempotency keys scoped to each client, rate limiting in Redis
-- [ ] 4. Deploy: Docker image (done), CI (done), AWS
+- [ ] 4. Deploy: Docker image (done), CI (done), AWS with EC2 and RDS
 - [ ] 5. Batch reconciliation of bank statements with Spring Batch
