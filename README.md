@@ -4,7 +4,7 @@
 
 Double-entry ledger API: accounts, deposits and transfers, where every movement of money is two entries that sum to zero.
 
-**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers, Docker, GitHub Actions, AWS (EC2, RDS), Caddy.
+**Stack:** Java 25, Spring Boot 4.1, Spring Security, Spring Batch, Spring Data JPA + Flyway, PostgreSQL, Redis, springdoc-openapi, JUnit, Mockito, Testcontainers, Docker, GitHub Actions, AWS (EC2, RDS), Caddy.
 
 ## Run locally
 
@@ -59,6 +59,29 @@ The two requests that move money need an `Idempotency-Key` header, any string up
 - A request that failed (say, for lack of funds) is not stored, so it can be retried with the same key.
 - Keys belong to the client, so two clients can use the same key without clashing.
 
+## Reconciling a bank statement
+
+Every deposit is money that should have reached the bank, so the bank's statement for a day should list each one once, with the same amount. A Spring Batch job checks that:
+
+```bash
+./mvnw -q package -DskipTests
+java -jar target/ledger-0.0.1-SNAPSHOT.jar --spring.profiles.active=reconcile statement=statement.csv date=2026-11-20 currency=EUR
+```
+
+The statement is a CSV file with a `reference,amount` header and one line per payment received. The reference is the deposit's transfer id, and the amount is in minor units. Days are in UTC. Mismatches go to the `mismatch` table, and a count of each kind goes to the log:
+
+| Kind | Meaning |
+|---|---|
+| `WRONG_AMOUNT` | The statement and the deposit have different amounts |
+| `DUPLICATE` | The reference appears on the statement more than once |
+| `NOT_IN_LEDGER` | No deposit in that currency has this reference |
+| `MISSING_FROM_STATEMENT` | A deposit made that day has no line on the statement |
+
+- The job reads the file 1,000 lines at a time. Each chunk's lines, its mismatches, and how far Spring Batch has read are saved in one transaction.
+- Each line is stored under the key (reconciliation, reference). A line whose reference is already stored inserts nothing, and that is how duplicates are found, even in different chunks.
+- A statement, day and currency are reconciled once. Running the same again fails with `JobInstanceAlreadyCompleteException`.
+- The process exits with 0 on success and 1 on failure, so a scheduler can run it.
+
 ## How it works
 
 - Entries are only ever inserted. A transfer writes one negative and one positive entry.
@@ -102,4 +125,4 @@ Measured with Docker Desktop on Windows 11.
 - [x] 2. Retries and deadlocks: idempotency keys, the opposing-transfers experiment
 - [x] 3. Client access: API keys with Spring Security, idempotency keys scoped to each client, rate limiting in Redis
 - [ ] 4. Deploy: Docker image (done), CI (done), AWS with EC2 and RDS
-- [ ] 5. Batch reconciliation of bank statements with Spring Batch
+- [ ] 5. Batch reconciliation of bank statements with Spring Batch: the job (done), a 1,000,000-line run, a kill and restart

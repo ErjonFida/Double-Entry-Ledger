@@ -21,3 +21,17 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  batch:
+    job:
+      enabled: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: reconcile
+  main:
+    web-application-type: none
+  batch:
+    job:
+      enabled: true

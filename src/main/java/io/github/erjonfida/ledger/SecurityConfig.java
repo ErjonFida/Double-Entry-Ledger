@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,6 +25,7 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 
 @Configuration
+@ConditionalOnWebApplication
 @SecurityScheme(name = "apiKey", type = SecuritySchemeType.APIKEY, in = SecuritySchemeIn.HEADER,
 		paramName = "X-API-Key")
 class SecurityConfig {
