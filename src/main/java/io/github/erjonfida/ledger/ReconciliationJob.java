@@ -9,6 +9,7 @@ import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -31,8 +32,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Configuration(proxyBeanMethods = false)
 class ReconciliationJob {
 
-	static final int CHUNK_SIZE = 1000;
-
 	private static final Logger log = LoggerFactory.getLogger(ReconciliationJob.class);
 
 	@Bean
@@ -45,9 +44,10 @@ class ReconciliationJob {
 	}
 
 	@Bean
+	@JobScope
 	Step match(JobRepository jobs, PlatformTransactionManager transactions, FlatFileItemReader<StatementLine> statement,
-			StatementWriter statementWriter) {
-		return new StepBuilder("match", jobs).<StatementLine, StatementLine>chunk(CHUNK_SIZE)
+			StatementWriter statementWriter, @Value("#{jobParameters['chunk'] ?: 1000}") int chunkSize) {
+		return new StepBuilder("match", jobs).<StatementLine, StatementLine>chunk(chunkSize)
 			.reader(statement)
 			.writer(statementWriter)
 			.transactionManager(transactions)
@@ -84,6 +84,9 @@ class ReconciliationJob {
 			OffsetDateTime from = LocalDate.parse(parameters.getString("date")).atStartOfDay().atOffset(ZoneOffset.UTC);
 			jdbc.update("DELETE FROM mismatch WHERE reconciliation_id = ? AND kind = 'MISSING_FROM_STATEMENT'",
 					reconciliation);
+			// The first step just added a whole statement. Without fresh statistics the planner can take the table
+			// for nearly empty and pick a plan that runs for many minutes instead of seconds
+			jdbc.execute("ANALYZE statement_line");
 			jdbc.update("""
 					INSERT INTO mismatch (reconciliation_id, kind, reference, ledger_amount)
 					SELECT ?, 'MISSING_FROM_STATEMENT', t.id::text, t.amount

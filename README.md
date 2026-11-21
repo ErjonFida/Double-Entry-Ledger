@@ -119,10 +119,38 @@ The statement is a CSV file with a `reference,amount` header and one line per pa
 
 Measured with Docker Desktop on Windows 11.
 
+## Reconciliation experiment
+
+The benchmark puts 1,000,000 deposits in the ledger for one day. Reconciliation reads nothing but the transfer rows, so it inserts those directly with SQL. Then it writes that day's statement with 1,000 errors in it:
+
+- 250 deposits left out
+- 250 at the wrong amount
+- 250 listed twice
+- 250 lines with references that match nothing
+
+The repeated and unknown lines go in at random places, so a duplicate almost always lands in a different chunk from the first copy. Each chunk size gets a warm-up run and three timed runs on the 1,000,250-line file. The table shows the medians, with Seconds covering the whole job.
+
+```bash
+./mvnw test -Dtest=ReconciliationBenchmark   # about 11 minutes, also writes target/reconciliation-benchmark.md
+```
+
+| Chunk size | Seconds | Lines/s |
+|--:|--:|--:|
+| 100 | 91.4 | 10,938 |
+| 1,000 | 33.1 | 30,265 |
+| 5,000 | 37.5 | 26,678 |
+
+- **Accuracy:** every run, warm-ups included, reported exactly the 1,000 injected errors and nothing else.
+- **Chunk size:** each chunk ends in a commit. A commit waits for PostgreSQL to flush its log to disk, and Spring Batch also updates its own progress rows. At 100 lines a chunk that happens 10,000 times, and the job takes almost three times as long. At 1,000 lines commits stop mattering, so 5,000 is no faster. The job uses 1,000.
+- **Planner statistics:** in the first version, the step that finds missing deposits once ran for over 8 minutes instead of 3 seconds. PostgreSQL had planned the query before autovacuum analysed the million new statement lines; the analysis finished 4 seconds after the query started. The step now runs `ANALYZE statement_line` first, and it has taken 2 to 6 seconds in every run since.
+- **Variance:** the timed runs took 67 to 104 seconds at 100 lines a chunk, 24 to 37 at 1,000 and 36 to 38 at 5,000. Commits wait on the disk, and Docker Desktop's disk is uneven. The warm-up at 100 (47 seconds) beat all three timed runs, so warm-up does not explain the spread.
+
+Measured with Docker Desktop on Windows 11.
+
 ## Roadmap
 
 - [x] 1. Core ledger: accounts, deposits, transfers, entry history, the balance invariant test
 - [x] 2. Retries and deadlocks: idempotency keys, the opposing-transfers experiment
 - [x] 3. Client access: API keys with Spring Security, idempotency keys scoped to each client, rate limiting in Redis
 - [ ] 4. Deploy: Docker image (done), CI (done), AWS with EC2 and RDS
-- [ ] 5. Batch reconciliation of bank statements with Spring Batch: the job (done), a 1,000,000-line run, a kill and restart
+- [ ] 5. Batch reconciliation of bank statements with Spring Batch: the job (done), a 1,000,000-line run (done), a kill and restart
