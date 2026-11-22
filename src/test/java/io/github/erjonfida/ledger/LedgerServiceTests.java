@@ -60,6 +60,19 @@ class LedgerServiceTests {
 	}
 
 	@Test
+	void aDepositUpdatesOnlyTheAccountItPaysInto() {
+		when(accounts.findById(alice)).thenReturn(Optional.of(new Account(client, "Alice", "EUR")));
+		when(accounts.findByCurrencyAndCashTrue("EUR")).thenReturn(Optional.of(new Account(null, "Cash EUR", "EUR")));
+		when(transfers.insertIfKeyIsNew(any())).thenReturn(1);
+
+		ledger.deposit(client, alice, 500, "key-1");
+
+		verify(accounts).credit(alice, 500);
+		verify(accounts, never()).debit(any(), anyLong());
+		verify(entries, times(2)).save(any());
+	}
+
+	@Test
 	void aTransferOverTheBalanceIsRejected() {
 		bothInEuros();
 		when(transfers.insertIfKeyIsNew(any())).thenReturn(1);

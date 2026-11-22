@@ -45,7 +45,9 @@ public class LedgerService {
 	@Transactional
 	public Transfer deposit(UUID client, UUID accountId, long amount, String idempotencyKey) {
 		Account cash = cashAccount(account(client, accountId).getCurrency());
-		return move(client, cash.getId(), accountId, amount, idempotencyKey);
+		// Only the account paid into is updated. A cash account's balance is not stored but is the sum of its entries,
+		// so deposits in one currency do not all queue for the same row
+		return move(client, cash.getId(), accountId, amount, idempotencyKey, () -> accounts.credit(accountId, amount));
 	}
 
 	@Transactional
@@ -56,23 +58,26 @@ public class LedgerService {
 		if (!account(client, from).getCurrency().equals(account(client, to).getCurrency())) {
 			throw new IllegalArgumentException("The accounts are in different currencies");
 		}
-		return move(client, from, to, amount, idempotencyKey);
+		return move(client, from, to, amount, idempotencyKey, () -> {
+			// Lower id first, so two opposite transfers lock the accounts in the same order and cannot deadlock
+			if (from.compareTo(to) < 0) {
+				debit(from, amount);
+				accounts.credit(to, amount);
+			}
+			else {
+				accounts.credit(to, amount);
+				debit(from, amount);
+			}
+		});
 	}
 
-	private Transfer move(UUID client, UUID from, UUID to, long amount, String idempotencyKey) {
+	private Transfer move(UUID client, UUID from, UUID to, long amount, String idempotencyKey,
+			Runnable updateBalances) {
 		Transfer transfer = new Transfer(client, from, to, amount, idempotencyKey);
 		if (transfers.insertIfKeyIsNew(transfer) == 0) {
 			return replay(transfer);
 		}
-		// Lower id first, so two opposite transfers lock the accounts in the same order and cannot deadlock
-		if (from.compareTo(to) < 0) {
-			debit(from, amount);
-			accounts.credit(to, amount);
-		}
-		else {
-			accounts.credit(to, amount);
-			debit(from, amount);
-		}
+		updateBalances.run();
 		entries.save(new Entry(transfer.getId(), from, -amount));
 		entries.save(new Entry(transfer.getId(), to, amount));
 		return transfer;

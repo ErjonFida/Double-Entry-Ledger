@@ -297,7 +297,8 @@ class LedgerIntegrationTests {
 				) unbalanced""")).isZero();
 		assertThat(count("""
 				SELECT count(*) FROM account a
-				WHERE a.balance <> (SELECT coalesce(sum(e.amount), 0) FROM entry e WHERE e.account_id = a.id)
+				WHERE NOT a.cash
+				AND a.balance <> (SELECT coalesce(sum(e.amount), 0) FROM entry e WHERE e.account_id = a.id)
 				""")).isZero();
 	}
 

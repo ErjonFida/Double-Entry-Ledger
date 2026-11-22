@@ -13,7 +13,7 @@ interface AccountRepository extends JpaRepository<Account, UUID> {
 
 	// Returns 1 if debited, 0 if the balance does not cover the amount
 	@Modifying
-	@Query(value = "UPDATE account SET balance = balance - :amount WHERE id = :id AND (cash OR balance >= :amount)",
+	@Query(value = "UPDATE account SET balance = balance - :amount WHERE id = :id AND balance >= :amount",
 			nativeQuery = true)
 	int debit(UUID id, long amount);
 
