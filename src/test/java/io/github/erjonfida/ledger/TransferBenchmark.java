@@ -14,10 +14,12 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.ToDoubleFunction;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,7 +53,12 @@ class TransferBenchmark {
 	@Autowired
 	TransactionTemplate tx;
 
+	@Autowired
+	HikariDataSource dataSource;
+
 	final AtomicInteger deadlocks = new AtomicInteger();
+
+	Semaphore connectionLine;
 
 	volatile long deadline;
 
@@ -84,6 +91,18 @@ class TransferBenchmark {
 		});
 	}
 
+	// The pool hands a free connection to whichever thread asks first, not the one waiting longest. Here threads
+	// queue for a connection in arrival order instead
+	Outcome lowerIdFirstInLine(UUID from, UUID to) {
+		connectionLine.acquireUninterruptibly();
+		try {
+			return lowerIdFirst(from, to);
+		}
+		finally {
+			connectionLine.release();
+		}
+	}
+
 	Outcome attempt(Runnable updates) {
 		try {
 			return tx.execute(status -> {
@@ -101,7 +120,7 @@ class TransferBenchmark {
 	}
 
 	void debit(UUID account) {
-		jdbc.update("UPDATE account SET balance = balance - 1 WHERE id = ? AND (cash OR balance >= 1)", account);
+		jdbc.update("UPDATE account SET balance = balance - 1 WHERE id = ? AND balance >= 1", account);
 	}
 
 	void credit(UUID account) {
@@ -118,6 +137,8 @@ class TransferBenchmark {
 		strategies.put("Sender first", this::senderFirst);
 		strategies.put("Sender first, retry on deadlock", this::senderFirstWithRetry);
 		strategies.put("Lower id first", this::lowerIdFirst);
+		strategies.put("Lower id first, queueing in order for a connection", this::lowerIdFirstInLine);
+		connectionLine = new Semaphore(dataSource.getMaximumPoolSize(), true);
 
 		StringBuilder table = new StringBuilder("""
 				| Strategy | Transfers/s | Failed | Deadlocks per 100 transfers | Median latency (ms) | p99 latency (ms) |
@@ -133,7 +154,7 @@ class TransferBenchmark {
 					median(rounds, Round::throughput), median(rounds, Round::failedPercent),
 					median(rounds, Round::deadlocksPer100), median(rounds, Round::medianMillis),
 					median(rounds, Round::p99Millis)));
-			if (strategy.getKey().equals("Lower id first")) {
+			if (strategy.getKey().startsWith("Lower id first")) {
 				assertThat(rounds).allSatisfy(r -> assertThat(r.deadlocksPer100()).isZero());
 			}
 		}
